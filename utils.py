@@ -11,6 +11,7 @@ from tensorflow.python.framework import function
 from tqdm import tqdm
 from functools import partial
 
+
 def encode_dataset(*splits, encoder):
     encoded_splits = []
     for split in splits[0]:
@@ -22,6 +23,7 @@ def encode_dataset(*splits, encoder):
         encoded_splits.append(fields)
     return encoded_splits
 
+
 def stsb_label_encoding(labels, nclass=6):
     """
     Label encoding from Tree LSTM paper (Tai, Socher, Manning)
@@ -30,10 +32,11 @@ def stsb_label_encoding(labels, nclass=6):
     for j, y in enumerate(labels):
         for i in range(nclass):
             if i == np.floor(y) + 1:
-                Y[j,i] = y - np.floor(y)
+                Y[j, i] = y - np.floor(y)
             if i == np.floor(y):
-                Y[j,i] = np.floor(y) - y + 1
+                Y[j, i] = np.floor(y) - y + 1
     return Y
+
 
 def shape_list(x):
     """
@@ -43,11 +46,13 @@ def shape_list(x):
     ts = tf.shape(x)
     return [ts[i] if ps[i] is None else ps[i] for i in range(len(ps))]
 
+
 def np_softmax(x, t=1):
-    x = x/t
+    x = x / t
     x = x - np.max(x, axis=-1, keepdims=True)
     ex = np.exp(x)
-    return ex/np.sum(ex, axis=-1, keepdims=True)
+    return ex / np.sum(ex, axis=-1, keepdims=True)
+
 
 def make_path(f):
     d = os.path.dirname(f)
@@ -55,72 +60,83 @@ def make_path(f):
         os.makedirs(d)
     return f
 
+
 def _identity_init(shape, dtype, partition_info, scale):
     n = shape[-1]
-    w = np.eye(n)*scale
+    w = np.eye(n) * scale
     if len([s for s in shape if s != 1]) == 2:
         w = w.reshape(shape)
     return w.astype(np.float32)
 
+
 def identity_init(scale=1.0):
     return partial(_identity_init, scale=scale)
+
 
 def _np_init(shape, dtype, partition_info, w):
     return w
 
+
 def np_init(w):
     return partial(_np_init, w=w)
+
 
 class ResultLogger(object):
     def __init__(self, path, *args, **kwargs):
         if 'time' not in kwargs:
             kwargs['time'] = time.time()
         self.f_log = open(make_path(path), 'w')
-        self.f_log.write(json.dumps(kwargs)+'\n')
+        self.f_log.write(json.dumps(kwargs) + '\n')
 
     def log(self, **kwargs):
         if 'time' not in kwargs:
             kwargs['time'] = time.time()
-        self.f_log.write(json.dumps(kwargs)+'\n')
+        self.f_log.write(json.dumps(kwargs) + '\n')
         self.f_log.flush()
 
     def close(self):
         self.f_log.close()
 
+
 def find_trainable_variables(key):
     return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, ".*{}.*".format(key))
+
 
 def flatten(outer):
     return [el for inner in outer for el in inner]
 
+
 def remove_none(l):
     return [e for e in l if e is not None]
+
 
 def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=float("inf")):
     n = len(datas[0])
     if truncate:
-        n = (n//n_batch)*n_batch
-    n = min(n, max_batches*n_batch)
+        n = (n // n_batch) * n_batch
+    n = min(n, max_batches * n_batch)
     n_batches = 0
     if verbose:
         f = sys.stderr
     else:
         f = open(os.devnull, 'w')
-    for i in tqdm(range(0, n, n_batch), total=n//n_batch, file=f, ncols=80, leave=False):
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
-            yield datas[0][i:i+n_batch]
+            yield datas[0][i:i + n_batch]
         else:
-            yield (d[i:i+n_batch] for d in datas)
+            yield (d[i:i + n_batch] for d in datas)
         n_batches += 1
+
 
 def get_ema_if_exists(v, gvs):
     name = v.name.split(':')[0]
-    ema_name = name+'/ExponentialMovingAverage:0'
+    ema_name = name + '/ExponentialMovingAverage:0'
     ema_v = [v for v in gvs if v.name == ema_name]
     if len(ema_v) == 0:
         ema_v = [v]
     return ema_v[0]
+
 
 def get_ema_vars(*vs):
     if tf.get_variable_scope().reuse:
@@ -131,6 +147,7 @@ def get_ema_vars(*vs):
     else:
         return vs
 
+
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
     shape_func=lambda op: [op.inputs[0].get_shape()])
@@ -140,6 +157,7 @@ def convert_gradient_to_tensor(x):
     """
     return x
 
+
 def assign_to_gpu(gpu=0, ps_dev="/device:CPU:0"):
     def _assign(op):
         node_def = op if isinstance(op, tf.NodeDef) else op.node_def
@@ -147,7 +165,9 @@ def assign_to_gpu(gpu=0, ps_dev="/device:CPU:0"):
             return ps_dev
         else:
             return "/gpu:%d" % gpu
+
     return _assign
+
 
 def average_grads(tower_grads):
     def average_dense(grad_and_vars):

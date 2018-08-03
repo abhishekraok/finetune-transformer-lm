@@ -5,6 +5,7 @@ import spacy
 
 from tqdm import tqdm
 
+
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.
@@ -16,6 +17,7 @@ def get_pairs(word):
         pairs.add((prev_char, char))
         prev_char = char
     return pairs
+
 
 def text_standardize(text):
     """
@@ -32,6 +34,7 @@ def text_standardize(text):
     text = re.sub('[^\S\n]+', ' ', text)
     return text.strip()
 
+
 class TextEncoder(object):
     """
     mostly a wrapper for a public python bpe tokenizer
@@ -40,23 +43,23 @@ class TextEncoder(object):
     def __init__(self, encoder_path, bpe_path):
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
         self.encoder = json.load(open(encoder_path))
-        self.decoder = {v:k for k,v in self.encoder.items()}
+        self.decoder = {v: k for k, v in self.encoder.items()}
         merges = open(bpe_path).read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
     def bpe(self, token):
-        word = tuple(token[:-1]) + ( token[-1] + '</w>',)
+        word = tuple(token[:-1]) + (token[-1] + '</w>',)
         if token in self.cache:
             return self.cache[token]
         pairs = get_pairs(word)
 
         if not pairs:
-            return token+'</w>'
+            return token + '</w>'
 
         while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -71,8 +74,8 @@ class TextEncoder(object):
                     new_word.extend(word[i:])
                     break
 
-                if word[i] == first and i < len(word)-1 and word[i+1] == second:
-                    new_word.append(first+second)
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                    new_word.append(first + second)
                     i += 2
                 else:
                     new_word.append(word[i])
