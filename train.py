@@ -1,23 +1,21 @@
-import os
-import time
-import math
-import json
-import joblib
-import random
 import argparse
+import json
+import math
+import os
+import random
+from functools import partial
+
+import joblib
 import numpy as np
 import tensorflow as tf
-
-from tqdm import tqdm
-from functools import partial
-from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score
+from sklearn.utils import shuffle
 
-from opt import adam, warmup_cosine, warmup_linear, warmup_constant
-from datasets import extract_sentence
 from analysis import rocstories as rocstories_analysis
+from datasets import extract_sentence
+from opt import adam, warmup_cosine, warmup_linear, warmup_constant
 from text_utils import TextEncoder
-from utils import encode_dataset, flatten, iter_data, find_trainable_variables, get_ema_vars, \
+from utils import encode_dataset, iter_data, find_trainable_variables, get_ema_vars, \
     convert_gradient_to_tensor, shape_list, ResultLogger, assign_to_gpu, average_grads, make_path
 
 
@@ -213,9 +211,10 @@ def model(X, M, Y, train=False, reuse=False):
         clf_h = tf.reshape(clf_h, [-1, args.n_embd])
         clf_logits = clf(clf_h, 1, train=train)
         clf_logits = tf.reshape(clf_logits, [-1, 2])
+        probabilities = tf.nn.softmax(clf_logits)
 
         clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=Y)
-        return clf_logits, clf_losses, lm_losses
+        return clf_logits, clf_losses, lm_losses, probabilities
 
 
 def mgpu_train(*xs):
@@ -225,7 +224,7 @@ def mgpu_train(*xs):
     for i, xs in enumerate(zip(*xs)):
         do_reuse = True if i > 0 else None
         with tf.device(assign_to_gpu(i, "/gpu:0")), tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse):
-            clf_logits, clf_losses, lm_losses = model(*xs, train=True, reuse=do_reuse)
+            clf_logits, clf_losses, lm_losses, probabilities = model(*xs, train=True, reuse=do_reuse)
             if args.lm_coef > 0:
                 train_loss = tf.reduce_mean(clf_losses) + args.lm_coef * tf.reduce_mean(lm_losses)
             else:
@@ -250,7 +249,7 @@ def mgpu_predict(*xs):
     xs = (tf.split(x, args.n_gpu, 0) for x in xs)
     for i, xs in enumerate(zip(*xs)):
         with tf.device(assign_to_gpu(i, "/gpu:0")), tf.variable_scope(tf.get_variable_scope(), reuse=True):
-            clf_logits, clf_losses, lm_losses = model(*xs, train=False, reuse=True)
+            clf_logits, clf_losses, lm_losses, lm_probs = model(*xs, train=False, reuse=True)
             gpu_ops.append([clf_logits, clf_losses, lm_losses])
     ops = [tf.concat(op, 0) for op in zip(*gpu_ops)]
     return ops
@@ -371,17 +370,17 @@ if __name__ == '__main__':
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--lr', type=float, default=6.25e-5)
     parser.add_argument('--lr_warmup', type=float, default=0.002)
-    parser.add_argument('--n_ctx', type=int, default=32)
-    parser.add_argument('--n_embd', type=int, default=32)
-    parser.add_argument('--n_head', type=int, default=1)
-    parser.add_argument('--n_layer', type=int, default=1)
+    parser.add_argument('--n_ctx', type=int, default=512)
+    parser.add_argument('--n_embd', type=int, default=768)
+    parser.add_argument('--n_head', type=int, default=12)
+    parser.add_argument('--n_layer', type=int, default=12)
     parser.add_argument('--embd_pdrop', type=float, default=0.1)
     parser.add_argument('--attn_pdrop', type=float, default=0.1)
     parser.add_argument('--resid_pdrop', type=float, default=0.1)
     parser.add_argument('--clf_pdrop', type=float, default=0.1)
     parser.add_argument('--l2', type=float, default=0.01)
     parser.add_argument('--vector_l2', action='store_true')
-    parser.add_argument('--n_gpu', type=int, default=1)
+    parser.add_argument('--n_gpu', type=int, default=4)
     parser.add_argument('--opt', type=str, default='adam')
     parser.add_argument('--afn', type=str, default='gelu')
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
@@ -463,7 +462,7 @@ if __name__ == '__main__':
     sess.run([p.assign(ip) for p, ip in zip(params[:n_transfer], init_params[:n_transfer])])
 
     eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses = mgpu_predict(X_train, M_train, Y_train)
-    eval_logits, eval_clf_losses, eval_lm_losses = model(X, M, Y, train=False, reuse=True)
+    eval_logits, eval_clf_losses, eval_lm_losses, eval_probs = model(X, M, Y, train=False, reuse=True)
     eval_clf_loss = tf.reduce_mean(eval_clf_losses)
     eval_mgpu_clf_loss = tf.reduce_mean(eval_mgpu_clf_losses)
 
