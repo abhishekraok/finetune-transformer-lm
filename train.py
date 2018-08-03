@@ -14,7 +14,7 @@ from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score
 
 from opt import adam, warmup_cosine, warmup_linear, warmup_constant
-from datasets import rocstories
+from datasets import extract_sentence
 from analysis import rocstories as rocstories_analysis
 from text_utils import TextEncoder
 from utils import encode_dataset, flatten, iter_data, find_trainable_variables, get_ema_vars, \
@@ -254,21 +254,17 @@ def mgpu_predict(*xs):
     return ops
 
 
-def transform_roc(X1, X2, X3):
+def transform_roc(X1):
     n_batch = len(X1)
     xmb = np.zeros((n_batch, 2, n_ctx, 2), dtype=np.int32)
     mmb = np.zeros((n_batch, 2, n_ctx), dtype=np.float32)
     start = encoder['_start_']
     delimiter = encoder['_delimiter_']
-    for i, (x1, x2, x3), in enumerate(zip(X1, X2, X3)):
-        x12 = [start] + x1[:max_len] + [delimiter] + x2[:max_len] + [clf_token]
-        x13 = [start] + x1[:max_len] + [delimiter] + x3[:max_len] + [clf_token]
+    for i, x1, in enumerate(X1):
+        x12 = [start] + x1[:max_len] + [delimiter] + [clf_token]
         l12 = len(x12)
-        l13 = len(x13)
         xmb[i, 0, :l12, 0] = x12
-        xmb[i, 1, :l13, 0] = x13
         mmb[i, 0, :l12] = 1
-        mmb[i, 1, :l13] = 1
     xmb[:, :, :, 1] = np.arange(n_vocab + n_special, n_vocab + n_special + n_ctx)
     return xmb, mmb
 
@@ -325,15 +321,18 @@ def log():
 argmax = lambda x: np.argmax(x, 1)
 
 pred_fns = {
-    'rocstories': argmax,
+    'extract_sentence': argmax,
+    'sentence': argmax
 }
 
 filenames = {
-    'rocstories': 'ROCStories.tsv',
+    'extract_sentence': 'ROCStories.tsv',
+    'sentence': 'sentence.tsv'
 }
 
 label_decoders = {
-    'rocstories': None,
+    'extract_sentence': None,
+    'sentence': None
 }
 
 
@@ -359,11 +358,13 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, default='log/')
     parser.add_argument('--save_dir', type=str, default='save/')
     parser.add_argument('--data_dir', type=str, default='data/')
+    parser.add_argument('--train_filename', type=str, default='train.tsv')
+    parser.add_argument('--test_filename', type=str, default='test.tsv')
     parser.add_argument('--submission_dir', type=str, default='submission/')
     parser.add_argument('--submit', action='store_true')
     parser.add_argument('--analysis', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--n_iter', type=int, default=3)
+    parser.add_argument('--n_iter', type=int, default=1)
     parser.add_argument('--n_batch', type=int, default=8)
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--lr', type=float, default=6.25e-5)
@@ -402,8 +403,10 @@ if __name__ == '__main__':
     encoder = text_encoder.encoder
     n_vocab = len(text_encoder.encoder)
 
-    (trX1, trX2, trX3, trY), (vaX1, vaX2, vaX3, vaY), (teX1, teX2, teX3) = encode_dataset(rocstories(data_dir),
-                                                                                          encoder=text_encoder)
+    (trX1, trY), (vaX1, vaY), (teX1, teY) = encode_dataset(
+        extract_sentence(train_filename,
+                         test_filename),
+        encoder=text_encoder)
     n_y = 2
     encoder['_start_'] = len(encoder)
     encoder['_delimiter_'] = len(encoder)
@@ -412,14 +415,14 @@ if __name__ == '__main__':
     n_special = 3
     max_len = n_ctx // 2 - 2
     n_ctx = min(max(
-        [len(x1[:max_len]) + max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(trX1, trX2, trX3)] + [
-            len(x1[:max_len]) + max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(vaX1, vaX2, vaX3)] + [
-            len(x1[:max_len]) + max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(teX1, teX2, teX3)]) + 3,
+        [len(x1[:max_len]) + max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(trX1, trX1, trX1)] + [
+            len(x1[:max_len]) + max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(vaX1, vaX1, vaX1)] + [
+            len(x1[:max_len]) + max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(teX1, teX1, teX1)]) + 3,
                 n_ctx)
-    trX, trM = transform_roc(trX1, trX2, trX3)
-    vaX, vaM = transform_roc(vaX1, vaX2, vaX3)
+    trX, trM = transform_roc(trX1)
+    vaX, vaM = transform_roc(vaX1)
     if submit:
-        teX, teM = transform_roc(teX1, teX2, teX3)
+        teX, teM = transform_roc(teX1)
 
     n_train = len(trY)
     n_valid = len(vaY)
@@ -483,4 +486,4 @@ if __name__ == '__main__':
         predict()
         if analysis:
             rocstories_analysis(data_dir, os.path.join(submission_dir, 'ROCStories.tsv'),
-                                os.path.join(log_dir, 'rocstories.jsonl'))
+                                os.path.join(log_dir, 'extract_sentence.jsonl'))
