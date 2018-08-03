@@ -361,7 +361,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='save/')
     parser.add_argument('--data_dir', type=str, default='data/')
     parser.add_argument('--train_filename', type=str, default='train.tsv')
-    parser.add_argument('--test_filename', tyie=str, default='test.tsv')
+    parser.add_argument('--test_filename', type=str, default='test.tsv')
     parser.add_argument('--submission_dir', type=str, default='submission/')
     parser.add_argument('--submit', action='store_true')
     parser.add_argument('--analysis', action='store_true')
