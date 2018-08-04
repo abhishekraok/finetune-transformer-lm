@@ -363,7 +363,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_filename', type=str, default='test.tsv')
     parser.add_argument('--submission_dir', type=str, default='submission/')
     parser.add_argument('--submit', action='store_true')
-    parser.add_argument('--analysis', action='store_false')
+    parser.add_argument('--analysis', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--n_iter', type=int, default=1)
     parser.add_argument('--n_batch', type=int, default=8)
