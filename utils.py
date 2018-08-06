@@ -13,6 +13,7 @@ from functools import partial
 
 
 def encode_dataset(*splits, encoder):
+    """Converts tokens to integer using the encoder"""
     encoded_splits = []
     for split in splits[0]:
         fields = []

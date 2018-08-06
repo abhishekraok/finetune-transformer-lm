@@ -249,7 +249,7 @@ def mgpu_predict(*xs):
     xs = (tf.split(x, args.n_gpu, 0) for x in xs)
     for i, xs in enumerate(zip(*xs)):
         with tf.device(assign_to_gpu(i, "/gpu:0")), tf.variable_scope(tf.get_variable_scope(), reuse=True):
-            clf_logits, clf_losses, lm_losses, lm_probs = model(*xs, train=False, reuse=True)
+            clf_logits, clf_losses, lm_losses, probabilites = model(*xs, train=False, reuse=True)
             gpu_ops.append([clf_logits, clf_losses, lm_losses])
     ops = [tf.concat(op, 0) for op in zip(*gpu_ops)]
     return ops

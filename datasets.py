@@ -25,8 +25,8 @@ def extract_sentence(train_filename, test_filename):
     train_sentence, train_y = get_sentence(train_filename)
     test_sentence, test_y = get_sentence(test_filename)
     train_count = int(0.9 * len(train_sentence))
-    trX1 = train_sentence[:train_count]
-    trY = train_y[:train_count]
-    vaX1 = train_sentence[train_count:]
-    vaY = train_y[train_count:]
-    return (trX1, trY), (vaX1, vaY), (test_sentence, test_y)
+    train_X = train_sentence[:train_count]
+    train_Y = train_y[:train_count]
+    val_X = train_sentence[train_count:]
+    val_Y = train_y[train_count:]
+    return (train_X, train_Y), (val_X, val_Y), (test_sentence, test_y)
