@@ -358,7 +358,6 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str)
     parser.add_argument('--log_dir', type=str, default='log/')
     parser.add_argument('--save_dir', type=str, default='save/')
-    parser.add_argument('--data_dir', type=str, default='data/')
     parser.add_argument('--train_filename', type=str, default='train.tsv')
     parser.add_argument('--test_filename', type=str, default='test.tsv')
     parser.add_argument('--submission_dir', type=str, default='submission/')
@@ -486,6 +485,3 @@ if __name__ == '__main__':
         sess.run([p.assign(ip) for p, ip in
                   zip(params, joblib.load(os.path.join(args.save_dir, args.desc, 'best_params.jl')))])
         predict()
-        if args.analysis:
-            rocstories_analysis(args.data_dir, os.path.join(args.submission_dir, 'ROCStories.tsv'),
-                                os.path.join(args.log_dir, 'extract_sentence.jsonl'))
