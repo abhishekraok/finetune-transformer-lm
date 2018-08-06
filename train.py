@@ -250,7 +250,7 @@ def mgpu_predict(*xs):
     for i, xs in enumerate(zip(*xs)):
         with tf.device(assign_to_gpu(i, "/gpu:0")), tf.variable_scope(tf.get_variable_scope(), reuse=True):
             clf_logits, clf_losses, lm_losses, probabilites = model(*xs, train=False, reuse=True)
-            gpu_ops.append([clf_logits, clf_losses, lm_losses])
+            gpu_ops.append([clf_logits, clf_losses, lm_losses, probabilites])
     ops = [tf.concat(op, 0) for op in zip(*gpu_ops)]
     return ops
 
@@ -290,9 +290,9 @@ def iter_predict(Xs, Ms):
     for xmb, mmb in iter_data(Xs, Ms, n_batch=n_batch_train, truncate=False, verbose=True):
         n = len(xmb)
         if n == n_batch_train:
-            logits.append(sess.run(eval_mgpu_logits, {X_train: xmb, M_train: mmb}))
+            logits.append(sess.run(eval_mgpu_probabilities, {X_train: xmb, M_train: mmb}))
         else:
-            logits.append(sess.run(eval_logits, {X: xmb, M: mmb}))
+            logits.append(sess.run(eval_probs, {X: xmb, M: mmb}))
     logits = np.concatenate(logits, 0)
     return logits
 
@@ -339,17 +339,13 @@ label_decoders = {
 
 def predict():
     filename = filenames[args.dataset]
-    pred_fn = pred_fns[args.dataset]
-    label_decoder = label_decoders[args.dataset]
-    predictions = pred_fn(iter_predict(teX, teM))
-    if label_decoder is not None:
-        predictions = [label_decoder[prediction] for prediction in predictions]
+    probabilities = iter_predict(teX, teM)
     path = os.path.join(args.submission_dir, filename)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
-        f.write('{}\t{}\n'.format('index', 'prediction'))
-        for i, prediction in enumerate(predictions):
-            f.write('{}\t{}\n'.format(i, prediction))
+    with open(path, 'w', encoding='utf-8') as f:
+        # Header probability, sentence, label
+        for prob, sentence, label in enumerate(zip(probabilities, test_sentence, test_y)):
+            f.write('{}\t{}\t{}\n'.format(prob, sentence, label))
 
 
 if __name__ == '__main__':
@@ -403,10 +399,10 @@ if __name__ == '__main__':
     encoder = text_encoder.encoder
     n_vocab = len(text_encoder.encoder)
 
-    (trX1, trY), (vaX1, vaY), (teX1, teY) = encode_dataset(
-        extract_sentence(args.train_filename,
-                         args.test_filename),
-        encoder=text_encoder)
+    (train_X, train_Y), (val_X, val_Y), (test_sentence, test_y) = extract_sentence(args.train_filename,
+                                                                                   args.test_filename)
+    (trX1, trY), (vaX1, vaY), (teX1, teY) = encode_dataset((train_X, train_Y), (val_X, val_Y), (test_sentence, test_y),
+                                                           encoder=text_encoder)
     n_y = 2
     encoder['_start_'] = len(encoder)
     encoder['_delimiter_'] = len(encoder)
@@ -460,7 +456,9 @@ if __name__ == '__main__':
         n_transfer = 1 + args.n_transfer * 12
     sess.run([p.assign(ip) for p, ip in zip(params[:n_transfer], init_params[:n_transfer])])
 
-    eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses = mgpu_predict(X_train, M_train, Y_train)
+    eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses, eval_mgpu_probabilities = mgpu_predict(X_train,
+                                                                                                        M_train,
+                                                                                                        Y_train)
     eval_logits, eval_clf_losses, eval_lm_losses, eval_probs = model(X, M, Y, train=False, reuse=True)
     eval_clf_loss = tf.reduce_mean(eval_clf_losses)
     eval_mgpu_clf_loss = tf.reduce_mean(eval_mgpu_clf_losses)
