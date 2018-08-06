@@ -11,7 +11,6 @@ import tensorflow as tf
 from sklearn.metrics import accuracy_score
 from sklearn.utils import shuffle
 
-from analysis import rocstories as rocstories_analysis
 from datasets import extract_sentence
 from opt import adam, warmup_cosine, warmup_linear, warmup_constant
 from text_utils import TextEncoder
@@ -286,15 +285,17 @@ def iter_apply(Xs, Ms, Ys):
 
 
 def iter_predict(Xs, Ms):
-    logits = []
+    prediction_probabilities = []
     for xmb, mmb in iter_data(Xs, Ms, n_batch=n_batch_train, truncate=False, verbose=True):
         n = len(xmb)
+        positive_class = 1
         if n == n_batch_train:
-            logits.append(sess.run(eval_mgpu_probabilities, {X_train: xmb, M_train: mmb}))
+            prediction_probabilities.append(
+                sess.run(eval_mgpu_probabilities, {X_train: xmb, M_train: mmb})[positive_class])
         else:
-            logits.append(sess.run(eval_probs, {X: xmb, M: mmb}))
-    logits = np.concatenate(logits, 0)
-    return logits
+            prediction_probabilities.append(sess.run(eval_probs, {X: xmb, M: mmb})[positive_class])
+    prediction_probabilities = np.concatenate(prediction_probabilities, 0)
+    return prediction_probabilities
 
 
 def save(path):
@@ -401,8 +402,9 @@ if __name__ == '__main__':
 
     (train_X, train_Y), (val_X, val_Y), (test_sentence, test_y) = extract_sentence(args.train_filename,
                                                                                    args.test_filename)
-    (trX1, trY), (vaX1, vaY), (teX1, teY) = encode_dataset((train_X, train_Y), (val_X, val_Y), (test_sentence, test_y),
-                                                           encoder=text_encoder)
+    (trX1, trY), (vaX1, vaY), (teX1, teY) = encode_dataset(
+        ((train_X, train_Y), (val_X, val_Y), (test_sentence, test_y)),
+        encoder=text_encoder)
     n_y = 2
     encoder['_start_'] = len(encoder)
     encoder['_delimiter_'] = len(encoder)
