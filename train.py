@@ -320,28 +320,9 @@ def log():
             save(os.path.join(args.save_dir, args.desc, 'best_params.jl'))
 
 
-argmax = lambda x: np.argmax(x, 1)
-
-pred_fns = {
-    'extract_sentence': argmax,
-    'sentence': argmax
-}
-
-filenames = {
-    'extract_sentence': 'ROCStories.tsv',
-    'sentence': 'sentence.tsv'
-}
-
-label_decoders = {
-    'extract_sentence': None,
-    'sentence': None
-}
-
-
 def predict():
-    filename = filenames[args.dataset]
     probabilities = iter_predict(teX, teM)
-    path = os.path.join(args.submission_dir, filename)
+    path = os.path.join(args.submission_dir, 'predictions.tsv')
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         # Header probability, sentence, label
@@ -472,6 +453,7 @@ if __name__ == '__main__':
     if args.submit:
         save(os.path.join(args.save_dir, args.desc, 'best_params.jl'))
     best_score = 0
+    print('n_epochs, n_updates, tr_cost, va_cost, tr_acc, va_acc')
     for i in range(args.n_iter):
         for xmb, mmb, ymb in iter_data(*shuffle(trX, trM, trYt, random_state=np.random), n_batch=n_batch_train,
                                        truncate=True, verbose=True):
