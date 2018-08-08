@@ -170,8 +170,8 @@ def embed(X, we):
     return h
 
 
-def clf(x, ny, w_init=tf.random_normal_initializer(stddev=0.02), b_init=tf.constant_initializer(0), train=False):
-    with tf.variable_scope('clf'):
+def fully_connected_layer(x, ny, w_init=tf.random_normal_initializer(stddev=0.02), b_init=tf.constant_initializer(0)):
+    with tf.variable_scope('fully_connected_layer'):
         nx = shape_list(x)[-1]
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
@@ -208,7 +208,7 @@ def model(X, M, Y, train=False, reuse=False):
             shape[1] = 1
             clf_h = tf.nn.dropout(clf_h, 1 - args.clf_pdrop, shape)
         clf_h = tf.reshape(clf_h, [-1, args.n_embd])
-        clf_logits = clf(clf_h, 1, train=train)
+        clf_logits = fully_connected_layer(clf_h, 1)
         clf_logits = tf.reshape(clf_logits, [-1, 2])
         probabilities = tf.nn.softmax(clf_logits)
 
@@ -291,9 +291,9 @@ def iter_predict(Xs, Ms):
         positive_class = 1
         if n == n_batch_train:
             prediction_probabilities.append(
-                sess.run(eval_mgpu_probabilities, {X_train: xmb, M_train: mmb})[positive_class])
+                sess.run(eval_mgpu_probabilities, {X_train: xmb, M_train: mmb})[:, positive_class])
         else:
-            prediction_probabilities.append(sess.run(eval_probs, {X: xmb, M: mmb})[positive_class])
+            prediction_probabilities.append(sess.run(eval_probs, {X: xmb, M: mmb})[:, positive_class])
     prediction_probabilities = np.concatenate(prediction_probabilities, 0)
     return prediction_probabilities
 
@@ -326,7 +326,7 @@ def predict():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         # Header probability, sentence, label
-        for prob, sentence, label in enumerate(zip(probabilities, test_sentence, test_y)):
+        for prob, sentence, label in zip(probabilities, test_sentence, test_y):
             f.write('{}\t{}\t{}\n'.format(prob, sentence, label))
 
 
